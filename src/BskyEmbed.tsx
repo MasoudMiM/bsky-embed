@@ -15,6 +15,7 @@ interface Props {
   linkImage?: boolean;
   customStyles?: string;
   loadMore?: boolean;
+  thread?: boolean;
 }
 
 const BskyEmbed: Component<Props> = ({
@@ -27,6 +28,7 @@ const BskyEmbed: Component<Props> = ({
   customStyles = '',
   search,
   loadMore = false,
+  thread = false,
 }: Props) => {
   let modalRef: HTMLDialogElement | null = null;
   let modalImageRef: HTMLImageElement | null = null;
@@ -44,19 +46,47 @@ const BskyEmbed: Component<Props> = ({
 
   const fetchData = async (cursor?: string) => {
     if (username) {
+      console.log('Fetching user posts with thread support...');
       agent.app.bsky.feed.getAuthorFeed({
         limit: displayLimit(),
         actor: username,
-        filter: "posts_no_replies",
+        filter: "posts_with_replies",
         cursor
-      }).then(({success, data}): void => {
+      }).then(async ({success, data}): Promise<void> => {
         if (success) {
-          const feed = formatData(data)
-          loadFeed(feed)
-          setIsLoading(false)
-          setCursor(data.cursor)
+          console.log('Initial feed data:', data);
+          
+          if (thread) {
+            // Fetch thread context for each post
+            const feedWithThreads = await Promise.all(
+              data.feed.map(async (item) => {
+                if (item.post.record['reply']) {
+                  try {
+                    const threadResponse = await agent.app.bsky.feed.getPostThread({
+                      uri: item.post.uri,
+                      depth: 5
+                    });
+                    return threadResponse.thread;
+                  } catch (err) {
+                    console.error('Error fetching thread:', err);
+                    return item;
+                  }
+                }
+                return item;
+              })
+            );
+            
+            const feed = formatData({ ...data, feed: feedWithThreads });
+            loadFeed(feed);
+          } else {
+            const feed = formatData(data);
+            loadFeed(feed);
+          }
+          
+          setIsLoading(false);
+          setCursor(data.cursor);
         } else {
-          // todo error handling
+          console.error('Failed to fetch feed');
         }
       });
     } else if (feed) {
