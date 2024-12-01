@@ -46,7 +46,8 @@ const BskyEmbed: Component<Props> = ({
 
   const fetchData = async (cursor?: string) => {
     if (username) {
-      console.log('Fetching user posts with thread support...');
+      console.log('DEBUG: Starting fetchData');
+      console.log('DEBUG: Username:', username);
       agent.app.bsky.feed.getAuthorFeed({
         limit: displayLimit(),
         actor: username,
@@ -54,21 +55,23 @@ const BskyEmbed: Component<Props> = ({
         cursor
       }).then(async ({success, data}): Promise<void> => {
         if (success) {
-          console.log('Initial feed data:', data);
+          console.log('DEBUG: Got feed data:', data);
           
           if (thread) {
-            // Fetch thread context for each post
+            console.log('DEBUG: Thread mode enabled');
             const feedWithThreads = await Promise.all(
               data.feed.map(async (item) => {
+                console.log('DEBUG: Processing post:', item.post.uri);
                 if (item.post.record['reply']) {
                   try {
                     const threadResponse = await agent.app.bsky.feed.getPostThread({
                       uri: item.post.uri,
                       depth: 5
                     });
+                    console.log('DEBUG: Thread found:', threadResponse);
                     return threadResponse.thread;
                   } catch (err) {
-                    console.error('Error fetching thread:', err);
+                    console.error('DEBUG: Thread error:', err);
                     return item;
                   }
                 }
@@ -76,9 +79,11 @@ const BskyEmbed: Component<Props> = ({
               })
             );
             
+            console.log('DEBUG: Final feed with threads:', feedWithThreads);
             const feed = formatData({ ...data, feed: feedWithThreads });
             loadFeed(feed);
           } else {
+            console.log('DEBUG: Thread mode disabled');
             const feed = formatData(data);
             loadFeed(feed);
           }
@@ -86,7 +91,7 @@ const BskyEmbed: Component<Props> = ({
           setIsLoading(false);
           setCursor(data.cursor);
         } else {
-          console.error('Failed to fetch feed');
+          console.error('DEBUG: Feed fetch failed');
         }
       });
     } else if (feed) {
